@@ -8,6 +8,7 @@ import { cubicEasingFn } from '~/utils/easings';
 import { logger } from '~/utils/logger';
 import { HistoryItem } from './HistoryItem';
 import { binDates } from './date-binning';
+import { UserProfile } from './UserProfile';
 
 const menuVariants = {
   closed: {
@@ -181,6 +182,9 @@ export function Menu() {
         </div>
         <div className="flex items-center border-t border-bolt-elements-borderColor p-4">
           <ThemeSwitch className="ml-auto" />
+        </div>
+        <div className="mt-auto border-t border-bolt-elements-borderColor">
+          <UserProfile />
         </div>
       </div>
     </motion.div>

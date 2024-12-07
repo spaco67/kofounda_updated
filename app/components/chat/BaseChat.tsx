@@ -21,6 +21,13 @@ import type { ProviderInfo } from '~/utils/types';
 import { ExportChatButton } from '~/components/chat/chatExportAndImport/ExportChatButton';
 import { ImportButton } from '~/components/chat/chatExportAndImport/ImportButton';
 import { ExamplePrompts } from '~/components/chat/ExamplePrompts';
+import { SpeechInput } from './SpeechInput';
+import { AuthButtons } from '~/components/auth/AuthButtons';
+import { useStore } from '@nanostores/react';
+import { promptCountStore, incrementPromptCount, UNREGISTERED_PROMPT_LIMIT } from '~/lib/stores/promptCount';
+import { LimitReachedModal } from './LimitReachedModal';
+import { AuthModal } from '~/components/auth/AuthModal';
+import { useUser } from '~/lib/hooks/useUser';
 
 // @ts-ignore TODO: Introduce proper types
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -116,6 +123,10 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     const TEXTAREA_MAX_HEIGHT = chatStarted ? 400 : 200;
     const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
     const [modelList, setModelList] = useState(MODEL_LIST);
+    const { user } = useUser();
+    const promptCount = useStore(promptCountStore);
+    const [showLimitModal, setShowLimitModal] = useState(false);
+    const [showRegisterModal, setShowRegisterModal] = useState(false);
 
     useEffect(() => {
       // Load API keys from cookies on component mount
@@ -158,6 +169,20 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       }
     };
 
+    const handleSendMessage = async (event: React.UIEvent, messageInput?: string) => {
+      if (!user && promptCount >= UNREGISTERED_PROMPT_LIMIT) {
+        setShowLimitModal(true);
+        return;
+      }
+
+      if (!user) {
+        incrementPromptCount();
+      }
+
+      // Original send message logic
+      sendMessage?.(event, messageInput);
+    };
+
     const baseChat = (
       <div
         ref={ref}
@@ -167,16 +192,19 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         )}
         data-chat-visible={showChat}
       >
+        <div className="absolute top-4 right-4 z-10">
+          <AuthButtons />
+        </div>
         <ClientOnly>{() => <Menu />}</ClientOnly>
         <div ref={scrollRef} className="flex flex-col lg:flex-row overflow-y-auto w-full h-full">
           <div className={classNames(styles.Chat, 'flex flex-col flex-grow lg:min-w-[var(--chat-min-width)] h-full')}>
             {!chatStarted && (
               <div id="intro" className="mt-[26vh] max-w-chat mx-auto text-center px-4 lg:px-0">
                 <h1 className="text-3xl lg:text-6xl font-bold text-bolt-elements-textPrimary mb-4 animate-fade-in">
-                  Where ideas begin
+                  Kofounda
                 </h1>
                 <p className="text-md lg:text-xl mb-8 text-bolt-elements-textSecondary animate-fade-in animation-delay-200">
-                  Bring ideas to life in seconds or get help on existing projects.
+                  Turn your ideas into reality in seconds
                 </p>
               </div>
             )}
@@ -240,7 +268,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
 
                         event.preventDefault();
 
-                        sendMessage?.(event);
+                        handleSendMessage(event);
                       }
                     }}
                     value={input}
@@ -251,7 +279,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                       minHeight: TEXTAREA_MIN_HEIGHT,
                       maxHeight: TEXTAREA_MAX_HEIGHT,
                     }}
-                    placeholder="How can Bolt help you today?"
+                    placeholder="How can Kofounda help you today?"
                     translate="no"
                   />
                   <ClientOnly>
@@ -265,13 +293,13 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                             return;
                           }
 
-                          sendMessage?.(event);
+                          handleSendMessage(event);
                         }}
                       />
                     )}
                   </ClientOnly>
                   <div className="flex justify-between items-center text-sm p-4 pt-2">
-                    <div className="flex gap-1 items-center">
+                    <div className="flex gap-2 items-center">
                       <IconButton
                         title="Enhance prompt"
                         disabled={input.length === 0 || enhancingPrompt}
@@ -294,6 +322,20 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                           </>
                         )}
                       </IconButton>
+
+                      <SpeechInput
+                        onSpeechResult={(text) => {
+                          if (handleInputChange) {
+                            const newValue = input + (input.length > 0 ? ' ' : '') + text;
+                            const event = {
+                              target: { value: newValue },
+                            } as React.ChangeEvent<HTMLTextAreaElement>;
+                            handleInputChange(event);
+                          }
+                        }}
+                        disabled={isStreaming}
+                      />
+
                       {chatStarted && <ClientOnly>{() => <ExportChatButton exportChat={exportChat} />}</ClientOnly>}
                     </div>
                     {input.length > 3 ? (
@@ -307,14 +349,31 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                 </div>
               </div>
             </div>
-            {!chatStarted && ImportButton(importChat)}
-            {!chatStarted && ExamplePrompts(sendMessage)}
+            {!chatStarted && <div className="flex justify-center mt-4">{ImportButton(importChat)}</div>}
+            {!chatStarted && ExamplePrompts(handleSendMessage)}
           </div>
           <ClientOnly>{() => <Workbench chatStarted={chatStarted} isStreaming={isStreaming} />}</ClientOnly>
         </div>
       </div>
     );
 
-    return <Tooltip.Provider delayDuration={200}>{baseChat}</Tooltip.Provider>;
+    return (
+      <>
+        <Tooltip.Provider delayDuration={200}>{baseChat}</Tooltip.Provider>
+        <LimitReachedModal 
+          isOpen={showLimitModal}
+          onClose={() => setShowLimitModal(false)}
+          onRegister={() => {
+            setShowLimitModal(false);
+            setShowRegisterModal(true);
+          }}
+        />
+        <AuthModal 
+          isOpen={showRegisterModal}
+          onClose={() => setShowRegisterModal(false)}
+          mode="register"
+        />
+      </>
+    );
   },
 );
